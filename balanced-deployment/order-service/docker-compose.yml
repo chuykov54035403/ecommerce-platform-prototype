@@ -1,0 +1,11 @@
+services:
+  order-service:
+    build:
+      context: ../../order-service
+    image: ecommerce-platform-prototype-order-service:latest
+    restart: unless-stopped
+    environment:
+      CASSANDRA_HOSTS: 10.10.1.231
+      KAFKA_BOOTSTRAP_SERVERS: 10.10.1.230:9092
+    ports:
+      - "8000:8000"

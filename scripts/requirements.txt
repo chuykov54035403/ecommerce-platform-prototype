@@ -1,0 +1,4 @@
+psycopg[binary]==3.2.3
+psycopg-pool==3.2.4
+elasticsearch==8.17.0
+aiohttp==3.11.11

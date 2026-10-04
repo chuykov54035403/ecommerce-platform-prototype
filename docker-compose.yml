@@ -1,0 +1,208 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ecommerce
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d ecommerce"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  cassandra:
+    image: cassandra:5
+    environment:
+      CASSANDRA_CLUSTER_NAME: ecommerce-mvp
+      CASSANDRA_DC: datacenter1
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      MAX_HEAP_SIZE: 768M
+      HEAP_NEWSIZE: 192M
+    ports:
+      - "9042:9042"
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces'"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.17.0
+    environment:
+      SERVER_NAME: kibana
+      ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  cerebro:
+    image: lmenezes/cerebro:latest
+    platform: linux/amd64
+    environment:
+      CEREBRO_PORT: 9000
+    ports:
+      - "9000:9000"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  kafka:
+    image: confluentinc/cp-kafka:7.8.0
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093,EXTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    ports:
+      - "29092:29092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:9092 --list >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
+  kafka-bat-ui:
+    image: ghcr.io/kafbat/kafka-ui:latest
+    ports:
+      - "8080:8080"
+    environment:
+      DYNAMIC_CONFIG_ENABLED: "true"
+      SWAGGER_UI_ENABLED: "true"
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  catalog-init:
+    build:
+      context: ./scripts
+    environment:
+      POSTGRES_DSN: postgresql://app:app@postgres:5432/ecommerce
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    restart: "no"
+
+  catalog-service:
+    build:
+      context: ./catalog-service
+    environment:
+      POSTGRES_DSN: postgresql://app:app@postgres:5432/ecommerce
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      catalog-init:
+        condition: service_completed_successfully
+
+  order-service:
+    build:
+      context: ./order-service
+    environment:
+      CASSANDRA_HOSTS: cassandra
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8002:8000"
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  inventory-service:
+    build:
+      context: ./inventory-service
+    environment:
+      POSTGRES_DSN: postgresql://app:app@postgres:5432/ecommerce
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8003:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  assembly-service:
+    build:
+      context: ./assembly-service
+    environment:
+      POSTGRES_DSN: postgresql://app:app@postgres:5432/ecommerce
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8004:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  monitoring-dashboard:
+    build:
+      context: ./monitoring-dashboard
+    environment:
+      ORDER_SERVICE_URL: http://order-service:8000
+      ASSEMBLY_SERVICE_URL: http://assembly-service:8000
+      INVENTORY_SERVICE_URL: http://inventory-service:8000
+      CATALOG_SERVICE_URL: http://catalog-service:8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - catalog-service
+      - order-service
+      - inventory-service
+      - assembly-service
+
+volumes:
+  postgres-data:
+  cassandra-data:
+  elasticsearch-data:
+  kafka-data:

@@ -1,0 +1,27 @@
+services:
+  monitoring-dashboard:
+    build:
+      context: ../../monitoring-dashboard
+    image: ecommerce-platform-prototype-monitoring-dashboard:latest
+    restart: unless-stopped
+    environment:
+      ORDER_SERVICE_URL: http://10.10.1.218/order
+      ASSEMBLY_SERVICE_URL: http://10.10.1.218/assembly
+      INVENTORY_SERVICE_URL: http://10.10.1.218/inventory
+      CATALOG_SERVICE_URL: http://10.10.1.218/catalog
+
+  haproxy:
+    image: haproxy:2.9-alpine
+    container_name: ecommerce-platform-prototype-haproxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - monitoring-dashboard
+    healthcheck:
+      test: ["CMD-SHELL", "haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg"]
+      interval: 10s
+      timeout: 5s
+      retries: 10

@@ -1,0 +1,41 @@
+Краткая инструкция по локальному запуску проекта
+
+Что должно быть установлено:
+- Docker Desktop
+- Docker Compose plugin, обычно уже входит в Docker Desktop
+- Git
+- curl, желательно для быстрой проверки API
+
+Запуск проекта:
+
+1. Открыть терминал.
+2. Перейти в корень проекта:
+
+   cd /Users/mchuykov/Documents/ecommerce-platform-prototype
+
+3. Запустить все сервисы:
+
+   docker compose up --build
+
+Первый запуск может занять несколько минут, потому что Cassandra и Elasticsearch
+запускаются не сразу.
+
+Основные адреса:
+- Monitoring Dashboard: http://localhost:8000
+- Catalog Swagger: http://localhost:8001/docs
+- Order Swagger: http://localhost:8002/docs
+- Inventory Swagger: http://localhost:8003/docs
+- Assembly Swagger: http://localhost:8004/docs
+- Kafbat UI: http://localhost:8080
+- Elasticsearch: http://localhost:9200
+- Kibana: http://localhost:5601
+
+Остановка проекта:
+
+   docker compose down
+
+Полный сброс данных:
+
+   docker compose down -v
+
+После полного сброса при следующем запуске базы и тестовые данные создадутся заново.

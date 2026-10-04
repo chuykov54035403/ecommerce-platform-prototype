@@ -1,0 +1,11 @@
+services:
+  inventory-service:
+    build:
+      context: ../../inventory-service
+    image: ecommerce-platform-prototype-inventory-service:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_DSN: postgresql://app:app@10.10.1.210:5432/ecommerce
+      KAFKA_BOOTSTRAP_SERVERS: 10.10.1.230:9092
+    ports:
+      - "8000:8000"

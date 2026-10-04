@@ -1,0 +1,18 @@
+services:
+  catalog-init-postgres:
+    build:
+      context: ../../scripts
+    image: ecommerce-platform-prototype-catalog-init:latest
+    environment:
+      POSTGRES_DSN: postgresql://app:app@10.10.1.210:5432/ecommerce
+    command: ["python", "init_catalog_postgres.py"]
+
+  catalog-init-elasticsearch:
+    image: ecommerce-platform-prototype-catalog-init:latest
+    environment:
+      POSTGRES_DSN: postgresql://app:app@10.10.1.210:5432/ecommerce
+      ELASTICSEARCH_URL: http://elastic:app@10.10.1.213:9200
+    command: ["python", "init_catalog_elasticsearch.py"]
+    depends_on:
+      catalog-init-postgres:
+        condition: service_completed_successfully

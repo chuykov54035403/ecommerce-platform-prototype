@@ -1,0 +1,147 @@
+Распределенный запуск сервисов через HAProxy
+
+1. Что нужно установить на серверах
+
+На всех серверах с контейнерами:
+- Docker;
+- Docker Compose plugin;
+- Git.
+
+На сервере HAProxy Docker тоже используется, отдельная установка HAProxy в систему не нужна.
+
+2. Схема серверов
+
+- PostgreSQL:       srv-pg01,            10.10.1.210
+- Elasticsearch:   srv-elasticsearch,   10.10.1.213
+- Kafka:           srv-kafka,           10.10.1.230
+- Cassandra:       srv-cassandra,       10.10.1.231
+- HAProxy + Dashboard: srv-haproxy,     10.10.1.218
+- Catalog replicas:   10.10.1.221, 10.10.1.214
+- Order replicas:     10.10.1.228, 10.10.1.229
+- Inventory replicas: 10.10.1.226, 10.10.1.227
+- Assembly replicas:  10.10.1.223, 10.10.1.225
+
+3. Подготовка
+
+На каждом сервере, где запускается контейнер, должен быть каталог проекта:
+
+git clone <repo-url> ecommerce-platform-prototype
+cd ecommerce-platform-prototype
+
+Команды ниже сначала переходят в нужный каталог внутри `balanced-deployment`,
+потом запускают обычный `docker compose up -d`.
+
+4. Запуск инфраструктуры
+
+На srv-pg01:
+
+cd balanced-deployment/postgres
+docker compose up -d
+
+На srv-elasticsearch:
+
+cd balanced-deployment/elasticsearch
+docker compose up -d
+
+На srv-kafka:
+
+cd balanced-deployment/kafka
+docker compose up -d
+
+Kafbat UI будет доступен на этом же сервере:
+
+http://10.10.1.230:8080
+
+На srv-cassandra:
+
+cd balanced-deployment/cassandra
+docker compose up -d
+
+5. Инициализация каталога
+
+После запуска PostgreSQL и Elasticsearch выполнить один раз на любом сервере с кодом проекта:
+
+cd balanced-deployment/catalog-init
+docker compose up --build
+
+Ожидаемый результат:
+- создана таблица catalog_products;
+- добавлены тестовые товары;
+- создан Elasticsearch index products;
+- товары проиндексированы в Elasticsearch.
+
+6. Запуск бизнес-сервисов
+
+На серверах srv-catalog01 (10.10.1.221) и srv-catalog02 (10.10.1.214):
+
+cd balanced-deployment/catalog-service
+docker compose up -d --build
+
+На серверах srv-order01 (10.10.1.228) и srv-order02 (10.10.1.229):
+
+cd balanced-deployment/order-service
+docker compose up -d --build
+
+На серверах srv-inventory01 (10.10.1.226) и srv-inventory02 (10.10.1.227):
+
+cd balanced-deployment/inventory-service
+docker compose up -d --build
+
+На серверах srv-assembly01 (10.10.1.223) и srv-assembly02 (10.10.1.225):
+
+cd balanced-deployment/assembly-service
+docker compose up -d --build
+
+7. Запуск HAProxy
+
+На srv-haproxy:
+
+cd balanced-deployment/haproxy
+docker compose up -d --build
+
+Эта команда запускает HAProxy и monitoring-dashboard.
+
+8. Проверка
+
+Проверить сервисы через балансировщик:
+
+curl -fsS http://10.10.1.218/catalog/health
+curl -fsS http://10.10.1.218/order/health
+curl -fsS http://10.10.1.218/inventory/health
+curl -fsS http://10.10.1.218/assembly/health
+curl -fsS http://10.10.1.218/dashboard/health
+
+Проверить поиск:
+
+curl -fsS "http://10.10.1.218/catalog/products/search?q=RTX"
+
+Проверить страницу статистики HAProxy:
+
+http://10.10.1.218/stats
+
+9. Основные URL через балансировщик
+
+- Catalog Service:   http://10.10.1.218/catalog
+- Order Service:     http://10.10.1.218/order
+- Inventory Service: http://10.10.1.218/inventory
+- Assembly Service:  http://10.10.1.218/assembly
+- Dashboard:         http://10.10.1.218/dashboard
+- HAProxy Stats:     http://10.10.1.218/stats
+- Kafbat UI:         http://10.10.1.230:8080
+
+Swagger:
+- http://10.10.1.218/catalog/docs
+- http://10.10.1.218/order/docs
+- http://10.10.1.218/inventory/docs
+- http://10.10.1.218/assembly/docs
+- http://10.10.1.218/dashboard/docs
+
+10. Пример заказа через HAProxy
+
+curl -X POST "http://10.10.1.218/order/orders" \
+  -H "content-type: application/json" \
+  -d "{\"user_id\":\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\",\"items\":[{\"product_id\":\"11111111-1111-1111-1111-111111111111\",\"quantity\":1}]}"
+
+После создания заказа проверить его статус:
+
+curl -fsS "http://10.10.1.218/order/orders/<order_id>"

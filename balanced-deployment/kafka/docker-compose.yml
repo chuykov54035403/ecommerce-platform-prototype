@@ -1,0 +1,48 @@
+services:
+  kafka:
+    image: confluentinc/cp-kafka:7.8.0
+    container_name: ecommerce-platform-prototype-kafka
+    hostname: kafka
+    restart: unless-stopped
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://10.10.1.230:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    ports:
+      - "9092:9092"
+    volumes:
+      - ecommerce-platform-prototype-kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server 10.10.1.230:9092 --list >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
+  kafka-bat-ui:
+    image: ghcr.io/kafbat/kafka-ui:latest
+    container_name: ecommerce-platform-prototype-kafka-ui
+    restart: unless-stopped
+    environment:
+      DYNAMIC_CONFIG_ENABLED: "true"
+      SWAGGER_UI_ENABLED: "true"
+      KAFKA_CLUSTERS_0_NAME: ecommerce-platform-prototype
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: 10.10.1.230:9092
+    ports:
+      - "8080:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+volumes:
+  ecommerce-platform-prototype-kafka-data:

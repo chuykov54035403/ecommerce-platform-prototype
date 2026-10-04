@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>E-commerce MVP Monitor</title>
+  <style>
+    :root { color-scheme: light; --bg: #f7f8fa; --ink: #17202a; --muted: #5f6b7a; --line: #d9dee7; --accent: #0f766e; --warn: #b42318; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
+    header, main { max-width: 1120px; margin: 0 auto; padding: 24px; }
+    header { padding-bottom: 10px; }
+    h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: 0; }
+    h2 { margin: 0 0 12px; font-size: 18px; letter-spacing: 0; }
+    form { display: flex; gap: 8px; align-items: center; margin-top: 16px; }
+    input { min-width: 360px; max-width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+    button { border: 0; border-radius: 6px; padding: 10px 14px; background: var(--accent); color: white; font-weight: 650; cursor: pointer; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    section { background: white; border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+    .wide { grid-column: 1 / -1; }
+    .muted { color: var(--muted); }
+    .status { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #e6f4f1; color: #075e56; font-weight: 700; }
+    .error { color: var(--warn); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    pre { overflow: auto; margin: 0; padding: 10px; background: #f0f2f5; border-radius: 6px; }
+    @media (max-width: 760px) { header, main { padding: 16px; } .grid { grid-template-columns: 1fr; } form { flex-direction: column; align-items: stretch; } input { min-width: 0; width: 100%; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>E-commerce MVP Monitor</h1>
+    <p class="muted">Order, Kafka audit, inventory, assembly, and Elasticsearch status in one view.</p>
+    <form method="get">
+      <input name="order_id" value="{{ order_id }}" placeholder="Order UUID">
+      <button type="submit">Inspect</button>
+    </form>
+  </header>
+  <main class="grid">
+    <section>
+      <h2>Order</h2>
+      {% if order and order.error %}<p class="error">{{ order.error }}</p>
+      {% elif order %}
+        <p><span class="status">{{ order.status }}</span></p>
+        <p><strong>User:</strong> {{ order.user_id or "unknown" }}</p>
+        <pre>{{ order | tojson(indent=2) }}</pre>
+      {% else %}<p class="muted">Enter an order id.</p>{% endif %}
+    </section>
+    <section>
+      <h2>Assembly</h2>
+      {% if assembly and assembly.error %}<p class="error">{{ assembly.error }}</p>
+      {% elif assembly %}
+        <p><strong>User:</strong> {{ assembly.user_id or "unknown" }}</p>
+        <pre>{{ assembly | tojson(indent=2) }}</pre>
+      {% else %}<p class="muted">No assembly task yet.</p>{% endif %}
+    </section>
+    <section>
+      <h2>Inventory</h2>
+      {% if inventory %}
+      <table>
+        <thead><tr><th>Product</th><th>Ordered</th><th>Available</th><th>Reserved</th><th>Free</th></tr></thead>
+        <tbody>
+        {% for row in inventory %}
+          <tr>
+            <td>{{ row.order_item.product_id }}</td>
+            <td>{{ row.order_item.quantity }}</td>
+            <td>{{ row.inventory.quantity_available if row.inventory else "" }}</td>
+            <td>{{ row.inventory.quantity_reserved if row.inventory else "" }}</td>
+            <td>{{ row.inventory.quantity_free if row.inventory else "" }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="muted">Inventory is shown after an order is loaded.</p>{% endif %}
+    </section>
+    <section>
+      <h2>Elasticsearch</h2>
+      {% if search %}<pre>{{ search | tojson(indent=2) }}</pre>
+      {% else %}<p class="muted">Search projection status is shown after lookup.</p>{% endif %}
+    </section>
+    <section class="wide">
+      <h2>Kafka Messages Recorded by Order Service</h2>
+      {% if order and order.kafka_messages %}
+      <table>
+        <thead><tr><th>Time</th><th>Topic</th><th>Direction</th><th>Payload</th></tr></thead>
+        <tbody>
+        {% for msg in order.kafka_messages %}
+          <tr><td>{{ msg.created_at }}</td><td>{{ msg.topic }}</td><td>{{ msg.direction }}</td><td><pre>{{ msg.payload | tojson(indent=2) }}</pre></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="muted">No Kafka audit messages found for this order.</p>{% endif %}
+    </section>
+  </main>
+</body>
+</html>

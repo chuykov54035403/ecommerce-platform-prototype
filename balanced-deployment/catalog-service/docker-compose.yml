@@ -1,0 +1,12 @@
+services:
+  catalog-service:
+    build:
+      context: ../../catalog-service
+    image: ecommerce-platform-prototype-catalog-service:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_DSN: postgresql://app:app@10.10.1.210:5432/ecommerce
+      ELASTICSEARCH_URL: http://elastic:app@10.10.1.213:9200
+      KAFKA_ENABLED: "false"
+    ports:
+      - "8000:8000"
